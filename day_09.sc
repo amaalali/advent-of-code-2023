@@ -77,9 +77,12 @@ def run2(input: String): Int =
     .map(logic2)
     .sum
 
-// >>>>>>>>>>>>>>>>>>>>>>>
-// Testing
-// >>>>>>>>>>>>>>>>>>>>>>>
+/*
+ ***************************
+ * TESTING
+ ***************************
+ */
+
 def pos(lineNum: Int)(input: String): String =
   scala.io.Source
     .fromString(input)
@@ -176,9 +179,11 @@ run(run2)(puzzle)
 // test(run1(puzzle), 1806615041)
 // test(run2(puzzle), 1211)
 
-// >>>>>>>>>>>>>>>>>>>>>>>
-// Data
-// >>>>>>>>>>>>>>>>>>>>>>>
+/*
+ **************************
+ * DATA
+ **************************
+ */
 def example: String =
   """0 3 6 9 12 15
     |1 3 6 10 15 21
