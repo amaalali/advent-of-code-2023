@@ -1,11 +1,6 @@
 //> using file Helper.scala
-import scala.util.Try
-import scala.concurrent.Future
-import util.chaining.scalaUtilChainingOps
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
+import scala.collection.mutable.AnyRefMap
+import scala.annotation.tailrec
 import util.chaining.scalaUtilChainingOps
 
 val L: 'L' = 'L'
@@ -34,13 +29,13 @@ def parseMapping(line: String): Map[String, String] = {
   )
 }
 
-def parseAllMappings(input: String): Map[String, String] =
+def parseAllMappings(input: String): AnyRefMap[String, String] =
   scala.io.Source
     .fromString(input)
     .getLines()
     .drop(2)
     .map(parseMapping)
-    .foldLeft(Map.empty[String, String])(_ ++ _)
+    .foldLeft(AnyRefMap.empty[String, String])((a, b) => a ++ b.toList)
 
 def parseStarterElement(input: String): String =
   scala.io.Source
@@ -52,150 +47,157 @@ def parseStarterElement(input: String): String =
     .head
     .pipe(parseMapping(_).toList(0)._1)
 
-case class Res(res: Int) extends Throwable
+def logic1(
+    directions: Iterator[Dir],
+    mapping: AnyRefMap[String, String],
+    endTest: String => Boolean
+)(
+    startAt: String
+): Int = {
 
-def logic(directions: Iterator[Dir], mapping: Map[String, String])(startingKey: String): Int = {
-  Try {
-    directions.foldLeft((0, startingKey)) { case ((count, currKey), currDir) =>
+  @tailrec
+  def loop(count: Int, currKey: String): Int = {
+    if (endTest(currKey)) {
+      logger.debug(s"Terminal key found ${currKey}")
+      count
+    } else {
+      val currDir: Char = directions.next()
       val searchKey = currKey + currDir
-      val nextKey = mapping.get(searchKey).get
+      val nextKey = mapping(searchKey)
 
-      println(s"[DEBUG $startingKey] count=${count} currKey=${currKey} searchKey=${searchKey} nextKey=${nextKey}")
-
-      if (currKey == "ZZZ") {
-        println(s"[DEBUG] about to throw")
-        throw Res(count)
+      if (count % 100000 == 0) {
+        logger.debug(
+          s"count=${count} currKey=${currKey} searchKey=${searchKey} nextKey=${nextKey}",
+          startAt
+        )
       }
 
-      (count + 1, nextKey)
+      loop(count + 1, nextKey)
     }
-  }.fold[Int](
-    _.asInstanceOf[Res].res,
-    _ => -1
-  )
-}
+  }
 
-def logicF(directions: Iterator[Dir], mapping: Map[String, String])(startingKey: String): Future[Int] =
-  Future(logic(directions, mapping)(startingKey))
+  loop(0, startAt)
+}
 
 def run1(input: String): Int = {
+  val startingKey: String = "AAA"
   val directions: Iterator[Dir] = parseLRs(input)
-  val mapping: Map[String, String] = parseAllMappings(input)
-
-  logic(directions, mapping)("AAA")
-}
-
-def run2(input: String): Int = {
-  val directions = parseLRs(input)
   val mapping = parseAllMappings(input)
-  val starters = mapping.keys.map(x => x.slice(0, x.length - 1)).filter(_.endsWith("A"))
-  println(s"[DEBUG] starters=${starters}")
 
-  val res = Future
-    .sequence {
-      starters.map(logicF(directions, mapping))
-    }
-    .map(
-      _.max
-    )
-
-  Await.result(res, 2.minutes)
-
-  directions.map(
-    logic
-  )
-
-  // Try {
-  //   directions.foldLeft((0, starters)) { case ((count, currKeys), currDir) =>
-  //     if (currKeys.forall(_.endsWith("Z"))) {
-  //       println(s"[DEBUG] about to throw")
-  //       throw Res(count)
-  //     }
-
-  //     println(s"[DEBUG] count=${count} currKeys=${currKeys}")
-
-  //     val nextKeys = currKeys.map { currKey =>
-  //       val searchKey = currKey + currDir
-  //       mapping.get(searchKey).get
-  //     }
-
-  //     (count + 1, nextKeys)
-  //   }
-  // }.fold[Int](
-  //   _.asInstanceOf[Res].res,
-  //   _ => -1
-  // )
-
+  logic1(directions, mapping, _ == "ZZZ")(startingKey)
 }
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-// Testing
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+def calculatePrimeFactors(n: Int): Map[Int, Int] = {
+  def loop(p: Int, rem: Int, res: List[Int]): List[Int] =
+    if (rem % p == 0) {
+      loop(p, rem / p, res :+ p)
+    } else if (p > rem) {
+      res
+    } else {
+      loop(p + 1, rem, res)
+    }
 
-// test(
-//   parseLRs(example1).take(5).toList,
-//   List(R, L) ++ List(R, L) ++ List(R)
-// )
+  loop(2, n, Nil).groupBy(identity).mapValues(_.size).toMap
+}
 
-// test(
-//   parseLRs(example2).take(7).toList,
-//   List(L, L, R) ++ List(L, L, R) ++ List(L)
-// )
+def findLCM(ints: Seq[Int]): BigInt =
+  ints
+    .map(calculatePrimeFactors)
+    .foldLeft(Map.empty[Int, Int]) { (acc, next) =>
+      val accKeys = acc.keySet
+      val nextKeys = next.keySet
 
-// test(
-//   parseMapping("""AAA = (BBB, CCC)"""),
-//   Map("AAAL" -> "BBB", "AAAR" -> "CCC")
-// )
+      val common = accKeys.intersect(nextKeys)
+      val difference = accKeys.union(nextKeys).diff(common)
 
-// test(
-//   parseMapping("""BBB = (DDD, EEE)"""),
-//   Map("BBBL" -> "DDD", "BBBR" -> "EEE")
-// )
+      val commonMin = common.map(k => k -> acc(k).min(next(k)))
 
-// test(
-//   parseMapping("""CCC = (ZZZ, GGG)"""),
-//   Map("CCCL" -> "ZZZ", "CCCR" -> "GGG")
-// )
+      val differenceMin = difference.map(k => k -> acc.get(k).orElse(next.get(k)).get)
 
-// test(
-//   parseMapping("""DDD = (DDD, DDD)"""),
-//   Map("DDDL" -> "DDD", "DDDR" -> "DDD")
-// )
+      (commonMin ++ differenceMin).toList.toMap
+    }
+    .map((x, y) => BigInt(x) * BigInt(y))
+    .product
 
-// test(
-//   parseMapping("""EEE = (EEE, EEE)"""),
-//   Map("EEEL" -> "EEE", "EEER" -> "EEE")
-// )
+def run2(input: String): BigInt = {
+  val mapping: AnyRefMap[String, String] = parseAllMappings(input)
+  val startingKeys = mapping.keys.filter(_.endsWith("AL")).map(x => x.slice(0, x.length - 1)).toVector
 
-// test(
-//   parseMapping("""GGG = (GGG, GGG)"""),
-//   Map("GGGL" -> "GGG", "GGGR" -> "GGG")
-// )
+  val results = startingKeys.map(key => logic1(parseLRs(input), mapping, _.endsWith("Z"))(key))
 
-// test(
-//   parseMapping("""ZZZ = (ZZZ, ZZZ)"""),
-//   Map("ZZZL" -> "ZZZ", "ZZZR" -> "ZZZ")
-// )
+  findLCM(results)
+}
 
-// test(
-//   parseAllMappings(example1),
-//   Map(
-//     "AAAL" -> "BBB",
-//     "AAAR" -> "CCC",
-//     "BBBL" -> "DDD",
-//     "BBBR" -> "EEE",
-//     "CCCL" -> "ZZZ",
-//     "CCCR" -> "GGG",
-//     "DDDL" -> "DDD",
-//     "DDDR" -> "DDD",
-//     "EEEL" -> "EEE",
-//     "EEER" -> "EEE",
-//     "GGGL" -> "GGG",
-//     "GGGR" -> "GGG",
-//     "ZZZL" -> "ZZZ",
-//     "ZZZR" -> "ZZZ"
-//   )
-// )
+/*
+ **************************
+ * TESTING
+ **************************
+ */
+
+test(
+  parseLRs(example1).take(5).toList,
+  List(R, L) ++ List(R, L) ++ List(R)
+)
+
+test(
+  parseLRs(example2).take(7).toList,
+  List(L, L, R) ++ List(L, L, R) ++ List(L)
+)
+
+test(
+  parseMapping("""AAA = (BBB, CCC)"""),
+  Map("AAAL" -> "BBB", "AAAR" -> "CCC")
+)
+
+test(
+  parseMapping("""BBB = (DDD, EEE)"""),
+  Map("BBBL" -> "DDD", "BBBR" -> "EEE")
+)
+
+test(
+  parseMapping("""CCC = (ZZZ, GGG)"""),
+  Map("CCCL" -> "ZZZ", "CCCR" -> "GGG")
+)
+
+test(
+  parseMapping("""DDD = (DDD, DDD)"""),
+  Map("DDDL" -> "DDD", "DDDR" -> "DDD")
+)
+
+test(
+  parseMapping("""EEE = (EEE, EEE)"""),
+  Map("EEEL" -> "EEE", "EEER" -> "EEE")
+)
+
+test(
+  parseMapping("""GGG = (GGG, GGG)"""),
+  Map("GGGL" -> "GGG", "GGGR" -> "GGG")
+)
+
+test(
+  parseMapping("""ZZZ = (ZZZ, ZZZ)"""),
+  Map("ZZZL" -> "ZZZ", "ZZZR" -> "ZZZ")
+)
+
+test(
+  parseAllMappings(example1),
+  Map(
+    "AAAL" -> "BBB",
+    "AAAR" -> "CCC",
+    "BBBL" -> "DDD",
+    "BBBR" -> "EEE",
+    "CCCL" -> "ZZZ",
+    "CCCR" -> "GGG",
+    "DDDL" -> "DDD",
+    "DDDR" -> "DDD",
+    "EEEL" -> "EEE",
+    "EEER" -> "EEE",
+    "GGGL" -> "GGG",
+    "GGGR" -> "GGG",
+    "ZZZL" -> "ZZZ",
+    "ZZZR" -> "ZZZ"
+  )
+)
 
 test(
   run1(example1),
@@ -207,18 +209,36 @@ test(
   6
 )
 
-// run(run1)(puzzle)
+run.ignore(run1(puzzle))
+test(run1(puzzle), 16271)
+
+test(
+  run2(example1),
+  2
+)
+
+test(
+  run2(example2),
+  6
+)
 
 test(
   run2(example3),
   6
 )
 
-// run(run2)(puzzle)
+run.ignore(run2(puzzle))
 
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-// Data
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+test(
+  run2(puzzle),
+  BigInt("14265111103729")
+)
+
+/*
+ **************************
+ * DATA
+ **************************
+ */
 
 def example1: String =
   """RL
