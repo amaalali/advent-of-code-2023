@@ -24,3 +24,5 @@ project/metals.sbt # Don't force metals on everyone
 
 # OS
 .DS_Store
+
+IGNORE_*
