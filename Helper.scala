@@ -1,13 +1,37 @@
-object test {
-  def apply[A](result: A, expected: => A): Unit =
-    logger.test(result == expected, result, expected)
+import java.util.concurrent.atomic.AtomicBoolean
+import scala.util.Try
 
-  def ignore[A](result: => A, expected: => A): Unit = ()
+private sealed trait TestMethods {
+  def apply[A](result: => A, expected: => A): Unit
+  def apply[A](name: String, result: => A, expected: => A): Unit
+}
 
-  def apply[A](name: String, result: A, expected: => A): Unit =
-    logger.test(result == expected, result, expected, name)
+object test extends TestMethods {
 
-  def ignore[A](name: String, result: A, expected: => A): Unit = ()
+  override def apply[A](result: => A, expected: => A): Unit =
+    Try(result)
+      .fold(
+        e => logger.test.failed(result, expected, e),
+        {
+          case x if x == expected => logger.test.passed(result, expected)
+          case _                  => logger.test.failed(result, expected)
+        }
+      )
+
+  override def apply[A](name: String, result: => A, expected: => A): Unit =
+    Try(result)
+      .fold(
+        e => logger.test.failed(result, expected, e, name),
+        {
+          case x if x == expected => logger.test.passed(result, expected, name)
+          case _                  => logger.test.failed(result, expected, name)
+        }
+      )
+
+  object ignore extends TestMethods {
+    override def apply[A](name: String, result: => A, expected: => A): Unit = ()
+    override def apply[A](result: => A, expected: => A): Unit = ()
+  }
 
   object where {
     def apply[A](result: => A, tester: A => Boolean, name: String = ""): Unit =
@@ -26,56 +50,67 @@ object run {
 
 object logger {
 
-  private var isDebugEnabled = false
-  private var isInfoEnabled = false
-  private var _forceTestErrorMessage = false
+  private var isDebugEnabled = AtomicBoolean(false)
+  private var isInfoEnabled = AtomicBoolean(false)
+  private var isForceTestErrorMessageEnabled = AtomicBoolean(false)
 
-  def debugOn() = {
-    isDebugEnabled = true
+  sealed trait toggle(target: AtomicBoolean) {
+    def on() = target.set(true)
+    def off() = target.set(false)
+    def isEnabled = target.get()
   }
 
-  def debugOff() = {
-    isDebugEnabled = false
-  }
+  object debug extends toggle(isDebugEnabled)
+  object info extends toggle(isInfoEnabled)
+  object test {
+    object forceMessage extends toggle(isForceTestErrorMessageEnabled)
 
-  def infoOn() = {
-    isInfoEnabled = true
-  }
+    def passed[A](result: A, expected: A, name: String = ""): Unit = {
+      val m = if (name.isBlank) name else s" > ${name}"
+      val resultStr: String = result.toString()
+      val expectedStr: String = expected.toString()
+      if (forceMessage.isEnabled) {
+        log(s"TEST${m}", s"passed :) ${expected} was equal to ${result}")
+      } else {
+        log(s"TEST${m}", s"passed :)")
+      }
+    }
 
-  def infoOff() = {
-    isInfoEnabled = false
-  }
+    def failed[A](result: A, expected: A): Unit = {
+      println()
+      log("TEST", s"FAILED :( expected=[${expected}] got=[${result}]")
+      println()
+    }
 
-  def forceTestErrorMessage() = {
-    _forceTestErrorMessage = true
+    def failed[A](result: A, expected: A, name: String): Unit = {
+      val m = s" > ${name}"
+      println()
+      log(s"TEST${m}", s"FAILED :( expected=[${expected}] got=[${result}]")
+      println()
+    }
+
+    def failed[A](result: A, expected: A, e: Throwable, name: String = ""): Unit = {
+      val m = if (name.isBlank) name else s" > ${name}"
+      println()
+      log(s"TEST${m}", s"FAILED :( Got exception. expected=[${expected}] got=[${result}]")
+      log(s"    ${m}", s"message=[${e.getMessage()}]")
+      log(s"    ${m}", s"  trace=[${e.getStackTrace()}]")
+      println()
+    }
+
   }
 
   def debug(message: => String, marker: String = ""): Unit =
     val m = if (marker.isBlank) marker else s" > ${marker}"
-    if (isDebugEnabled) log(s"DEBUG${m}", message)
+    if (debug.isEnabled) log(s"DEBUG${m}", message)
 
   def info(message: => String, marker: String = ""): Unit =
     val m = if (marker.isBlank) marker else s" > ${marker}"
-    if (isInfoEnabled) log(s"INFO${m}", message)
+    if (info.isEnabled) log(s"INFO${m}", message)
 
-  def test[A](passed: Boolean, result: A, expected: A, name: String = ""): Unit =
-    val m = if (name.isBlank) name else s" > ${name}"
-    if (passed) {
-      val resultStr: String = result.toString()
-      val expectedStr: String = expected.toString()
-      if (!_forceTestErrorMessage && ((resultStr.size + expectedStr.size) > 120)) {
-        log(s"TEST${m}", s"passed :)")
-      } else {
-        log(s"TEST${m}", s"passed :) ${expected} was equal to ${result}")
-      }
-    } else {
-      println()
-      log(s"TEST${m}", s"FAILED :( expected=[${expected}] but got=[${result}]")
-      println()
-    }
-
+  @deprecated("NOW")
   def testWhere[A](passed: Boolean, result: A, name: String = ""): Unit =
-    val m = if (name.isBlank) s" > ${name}" else name
+    val m = if (name.isBlank) name else s" > ${name}"
     if (passed) {
       log(s"TEST${m}", s"passed :) with result ${result}")
     } else {
