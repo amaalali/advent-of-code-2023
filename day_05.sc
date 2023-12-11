@@ -96,17 +96,24 @@ def parseSeedNums2(input: String): Seq[SeedRange] =
 
 def run2(input: String) = {
   val seeds = parseSeedNums2(input)
+  val parser = parseMapping(input)
 
-  val composedMappings = parseMapping(input)
-    .pipe { parser =>
-      (parser("seed-to-soil map:").get andThen
-        parser("soil-to-fertilizer map:").get andThen
-        parser("fertilizer-to-water map:").get andThen
-        parser("water-to-light map:").get andThen
-        parser("light-to-temperature map:").get andThen
-        parser("temperature-to-humidity map:").get andThen
-        parser("humidity-to-location map:").get)
-    }
+  val fn_seed_to_soil = parser("seed-to-soil map:")
+  val fn_soil_to_fertilizer = parser("soil-to-fertilizer map:")
+  val fn_fertilizer_to_water = parser("fertilizer-to-water map:")
+  val fn_water_to_light = parser("water-to-light map:")
+  val fn_light_to_temperature = parser("light-to-temperature map:")
+  val fn_temperature_to_humidity = parser("temperature-to-humidity map:")
+  val fn_humidity_to_location = parser("humidity-to-location map:")
+
+  val composedMappings =
+    fn_seed_to_soil.get andThen
+      fn_soil_to_fertilizer.get andThen
+      fn_fertilizer_to_water.get andThen
+      fn_water_to_light.get andThen
+      fn_light_to_temperature.get andThen
+      fn_temperature_to_humidity.get andThen
+      fn_humidity_to_location.get
 
   val seedLocationF: Seq[Future[BigInt]] = seeds
     .map { seed =>
@@ -135,24 +142,25 @@ def run2(input: String) = {
     .min
 }
 
-//>>>>>>>>>>>
-// TESTING
-//>>>>>>>>>>>
+/*
+ ***************************
+ * TESTING
+ ***************************
+ */
 
-// run(parseMappingSeedToSoil(_)("seed-to-soil map:"))(sample)
+test(parseMapping(sample)("seed-to-soil map:"), Mapping("seed-to-soil map:", List(Space(98, 50, 2), Space(50, 52, 48))))
 
-// test(parseMapping(sample)("seed-to-soil map:"), Mapping("seed-to-soil map:", List(Space(98, 50, 2), Space(50, 52, 48))))
+test(
+  parseMapping(sample)("soil-to-fertilizer map:"),
+  Mapping("soil-to-fertilizer map:", List(Space(15, 0, 37), Space(52, 37, 2), Space(0, 39, 15)))
+)
 
-// test(
-//   parseMapping(sample)("soil-to-fertilizer map:"),
-//   Mapping("soil-to-fertilizer map:", List(Space(15, 0, 37), Space(52, 37, 2), Space(0, 39, 15)))
-// )
+test.ignore(
+  run1(sample),
+  List(82, 43, 86, 35)
+)
 
-// test.ignore(
-//   run1(sample),
-//   List(82, 43, 86, 35)
-// )
-// run(run1)(puzzle)
+run.ignore(run1(puzzle))
 
 test(run1(puzzle), BigInt("313045984"))
 
@@ -163,8 +171,13 @@ test(
 
 val result = run2(puzzle)
 test.where(result, _ < BigInt("20283861"))
-println(s"[RUN] $result")
+run(result)
 
+/*
+ ***************************
+ * DATA
+ ***************************
+ */
 def sample: String =
   """seeds: 79 14 55 13
     |
