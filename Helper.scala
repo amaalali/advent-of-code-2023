@@ -12,9 +12,11 @@ object test extends TestMethods {
     Try(result)
       .fold(
         e => logger.test.failed(result, expected, e),
-        {
-          case x if x == expected => logger.test.passed(result, expected)
-          case _                  => logger.test.failed(result, expected)
+        res => {
+          val _e = expected
+          res match
+            case _r if _r == _e => logger.test.passed(_r, _e)
+            case _r             => logger.test.failed(_r, _e)
         }
       )
 
@@ -22,15 +24,17 @@ object test extends TestMethods {
     Try(result)
       .fold(
         e => logger.test.failed(result, expected, e, name),
-        {
-          case x if x == expected => logger.test.passed(result, expected, name)
-          case _                  => logger.test.failed(result, expected, name)
+        res => {
+          val _e = expected
+          res match
+            case _r if _r == _e => logger.test.passed(_r, _e, name)
+            case _r             => logger.test.failed(_r, _e, name)
         }
       )
 
   object ignore extends TestMethods {
-    override def apply[A](name: String, result: => A, expected: => A): Unit = ()
     override def apply[A](result: => A, expected: => A): Unit = ()
+    override def apply[A](name: String, result: => A, expected: => A): Unit = ()
   }
 
   object where {
@@ -117,7 +121,7 @@ object logger {
       log(s"TEST${m}", s"FAILED :( with result ${result}")
     }
 
-  def log(key: String, message: => String): Unit = {
+  def log(key: String, message: String): Unit = {
     println(s"[$key] ${message}")
   }
 }
