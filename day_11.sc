@@ -46,7 +46,6 @@ def findGaps(len: Int, elems: Seq[Int]): Seq[Int] = {
     }
     ._1
     .pipe(rngs => {
-      logger.debug(elems.toString(), "findGaps > pipe")
       (elems.head != 1, elems.last != len) match {
         case (true, true)   => Vector(0, rngs.head) ++ rngs :+ rngs.last :+ (len + 1)
         case (true, false)  => Vector(0, rngs.head) ++ rngs
@@ -78,30 +77,12 @@ def adjustForGravitationalDrift1(originalImageGalaxies: Galaxies, expansionLines
   val xExpansions = expansionLines._1
   val yExpansions = expansionLines._2
 
-  logger.debug(
-    xExpansions.toString(),
-    "adjust > xExp"
-  )
-
-  logger.debug(
-    yExpansions.toString(),
-    "adjust > xExp"
-  )
-
-  logger.debug(
-    originalImageGalaxies.sortBy(_._2).toString(),
-    "adjust > orig"
-  )
-
   originalImageGalaxies.map((x_i, y_i) => {
     val xIncr = xExpansions.size - xExpansions.filter(_ > x_i).size
     val x_n = x_i + xIncr
 
     val yIncr = yExpansions.size - yExpansions.filter(_ > y_i).size
     val y_n = y_i + yIncr
-
-    logger.debug(s"coord=[${(x_i)}, ${y_i}] x=[${x_i}] inc=[${xIncr}]")
-    logger.debug(s"coord=[${(x_i)}, ${y_i}] y=[${y_i}] inc=[${yIncr}]")
 
     (x_n, y_n)
   })
@@ -111,30 +92,20 @@ def adjustForGravitationalDriftX(multiplier: Int, originalImageGalaxies: Galaxie
   val xExpansions = expansionLines._1
   val yExpansions = expansionLines._2
 
-  logger.debug(
-    xExpansions.toString(),
-    "adjust > xExp"
-  )
-
-  logger.debug(
-    yExpansions.toString(),
-    "adjust > xExp"
-  )
-
-  logger.debug(
-    originalImageGalaxies.sortBy(_._2).toString(),
-    "adjust > orig"
-  )
-
   originalImageGalaxies.map((x_i, y_i) => {
-    val xIncr = BigInt(xExpansions.size - xExpansions.filter(_ > x_i).size) * BigInt(multiplier)
+    val xExpSize = xExpansions.size
+    val yExpSize = yExpansions.size
+
+    val xExpCount = xExpansions.filter(_ > x_i).size
+    val yExpCount = yExpansions.filter(_ > y_i).size
+
+    val xIncr = BigInt(xExpSize - xExpCount) * BigInt(multiplier - 1)
     val x_n = x_i + xIncr
 
-    val yIncr = BigInt(yExpansions.size - yExpansions.filter(_ > y_i).size) * BigInt(multiplier)
+    val yIncr = BigInt(yExpSize - yExpCount) * BigInt(multiplier - 1)
     val y_n = y_i + yIncr
 
-    logger.debug(s"coord=[${(x_i)}, ${y_i}] x=[${x_i}] inc=[${xIncr}]")
-    logger.debug(s"coord=[${(x_i)}, ${y_i}] y=[${y_i}] inc=[${yIncr}]")
+    logger.debug(s"(x,y)=[${(x_i)},${y_i}] x_i=[${x_i}] xExpSize=[${xExpSize}] xExpCount=[${xExpCount}] inc=[${xIncr}]")
 
     (x_n, y_n)
   })
@@ -146,20 +117,6 @@ def dist[A](g1: (A, A), g2: (A, A))(implicit numA: Numeric[A]): A =
     numA.abs(numA.minus(g1._2, g2._2))
   )
 
-// def distToNearestNeighbourOLD(galaxies: Galaxies): Seq[Int] =
-//   galaxies.foldLeft(Vector.empty[Int])(
-//     (minDists, currG) =>
-//       minDists :+ galaxies.foldLeft(Int.MaxValue) {
-//         case (acc, otherG) =>
-//           val intRes = dist(currG, otherG)
-//           if (intRes < acc && intRes != 0) {
-//             intRes
-//           } else {
-//             acc
-//           }
-//       }
-//   )
-
 def distToNearestNeighbour(galaxies: Galaxies): Seq[Int] =
   galaxies
     .combinations(2)
@@ -167,7 +124,6 @@ def distToNearestNeighbour(galaxies: Galaxies): Seq[Int] =
       val next: (Set[Galaxy], Int) = (comb.toSet, dist(comb.head, comb.last))
       distances + next
     }
-    .tap(x => logger.debug(x.toString(), "nb"))
     .values
     .toList
 
@@ -178,7 +134,6 @@ def distToNearestNeighbourBig(galaxies: BigGalaxies): Seq[BigInt] =
       val next: (Set[BigGalaxy], BigInt) = (comb.toSet, dist(comb.head, comb.last))
       distances + next
     }
-    .tap(x => logger.debug(x.toString(), "nb"))
     .values
     .toList
 
@@ -198,9 +153,12 @@ def run2(emptySpaceMultiplier: Int, input: String): BigInt = {
 
   val adjustedGalaxies = adjustForGravitationalDriftX(emptySpaceMultiplier, initialGalaxies, lines)
 
-  distToNearestNeighbourBig(adjustedGalaxies)
-    .tap(x => println(s"DEBUG ${x.size}"))
-    .sum
+  logger.debug(lines._1.toString, "xAdj")
+  logger.debug(lines._2.toString, "yAdj")
+  logger.debug(initialGalaxies.toString, "init")
+  logger.debug(adjustedGalaxies.toString, "adj ")
+
+  distToNearestNeighbourBig(adjustedGalaxies).sum
 }
 /*
  **************************
@@ -227,6 +185,7 @@ test(
     (6, 12)
   )
 )
+
 
 val (xLen, yLen) = measureImageSize(example)
 
@@ -277,8 +236,6 @@ test(
   9599070
 )
 
-logger.test.forceMessage.on()
-
 test(
   "run2 x 10 ",
   // run2(10, example) - 82,
@@ -292,10 +249,10 @@ test(
   8410
 )
 
-// run(run2(1000000, puzzle) - 82)
+run.ignore(run2(1000000, puzzle))
 test.where(run2(1000000, puzzle), !List(BigInt("842646756350"), BigInt("842646756432")).contains(_), "This is deffo no the answer")
+test(run2(1000000, puzzle), BigInt("842645913794"))
 
-run(run2(1000000, puzzle))
 
 /*
  **************************
