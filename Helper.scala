@@ -239,6 +239,10 @@ object logger {
     val m = if (marker.isBlank) marker else s" > ${marker}"
     if (info.isEnabled) log(s"INFO${m}", message)
 
+  def error(message: => String, marker: String = ""): Unit =
+    val m = if (marker.isBlank) marker else s" > ${marker}"
+    log(s"ERR ${m}", message)
+
   def log(key: String, message: String): Unit = {
     println(s"[$key] ${message}")
   }
