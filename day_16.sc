@@ -1,187 +1,138 @@
 //> using scala 3.3.1
 //> using file Helper.scala
-import logger.log
+//> using toolkit latest
+import scala.util.Failure
+import scala.util.Success
+import scala.annotation.targetName
 import scala.annotation.tailrec
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.AnyRefMap
 import scala.collection.mutable.ArraySeq
 import util.chaining.scalaUtilChainingOps
 
-val symbols = """\/|-"""
-def parseInputLine(string: String): IndexedSeq[(Int, Char)] =
-  string.zipWithIndex.collect {
-    case (c, i) if symbols.contains(c) => (i, c)
-  }
-
 type Coord = (Int, Int)
 extension (coord: Coord)
+  def x: Int = coord._1
+  def y: Int = coord._2
   def left: Coord = (coord._1 - 1, coord._2)
   def right: Coord = (coord._1 + 1, coord._2)
   def down: Coord = (coord._1, coord._2 + 1)
   def up: Coord = (coord._1, coord._2 - 1)
 
-type MirrorMap = Map[Coord, Char]
-def parseInput(string: String): MirrorMap =
-  io.Source
-    .fromString(string)
-    .getLines()
-    .zipWithIndex
-    .flatMap { (line, yIdx) =>
-      parseInputLine(line).map { case (xIdx, c) =>
-        (xIdx, yIdx) -> c
-      }
-    }
-    .toMap
-
-val I = 0 // location of optical device
 val R = 1
 val L = -1
 val U = 2
 val D = -2
-type Dir = R.type | L.type | D.type | U.type | I.type
+type Dir = R.type | L.type | D.type | U.type
 
-def calcNextCoord(dir: Dir, curr: Coord): Coord =
-  dir match
-    case R => curr.right
-    case L => curr.left
-    case U => curr.up
-    case D => curr.down
-    case I => curr
+type Beam = (Dir, Coord)
+extension (b: Beam)
+  def d: Dir = b._1
+  def coord: Coord = b._2
 
-extension (light: Set[(Dir, Coord)])
-  def onlyValid(xMax: Int, yMax: Int): Set[(Dir, Coord)] =
-    light
-      .filterNot(x =>
-        x._2._1 >= xMax ||
-          x._2._1 < 0 ||
-          x._2._2 >= yMax ||
-          x._2._2 < 0
+  @targetName("x_beam")
+  def x: Int = b._2._1
+  @targetName("y_beam")
+  def y: Int = b._2._2
+
+  @targetName("left_beam")
+  def left: Beam = (L, b.coord.left)
+
+  @targetName("right_beam")
+  def right: Beam = (R, b.coord.right)
+
+  @targetName("down_beam")
+  def down: Beam = (D, b.coord.down)
+
+  @targetName("up_beam")
+  def up: Beam = (U, b.coord.up)
+
+type MirrorMap = Vector[String]
+extension (map: MirrorMap) def get(coord: Coord) = map(coord.y)(coord.x)
+object MirrorMap:
+  def parse(string: String): MirrorMap =
+    io.Source
+      .fromString(string)
+      .getLines()
+      .toVector
+
+def physics(mirrorMap: MirrorMap, xLen: Int, yLen: Int)(beam: Beam): Set[Beam] = {
+  def validBeams(beams: Beam*): Set[Beam] =
+    beams
+      .filterNot(b =>
+        b.x >= xLen ||
+          b.x < 0 ||
+          b.y >= yLen ||
+          b.y < 0
       )
+      .toSet
 
-def RGoU(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.right), (U, curr.right.up))
+  (beam.d, (mirrorMap.get(beam.coord))) match
+    case (R, '\\') => validBeams(beam.down)
+    case (L, '\\') => validBeams(beam.up)
+    case (U, '\\') => validBeams(beam.left)
+    case (D, '\\') => validBeams(beam.right)
 
-def LGoU(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.left), (U, curr.left.up))
+    case (R, '/') => validBeams(beam.up)
+    case (L, '/') => validBeams(beam.down)
+    case (U, '/') => validBeams(beam.right)
+    case (D, '/') => validBeams(beam.left)
 
-def RGoD(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.right), (D, curr.right.down))
+    case (R, '|') => validBeams(beam.up, beam.down)
+    case (L, '|') => validBeams(beam.up, beam.down)
+    case (U, '|') => validBeams(beam.up)
+    case (D, '|') => validBeams(beam.down)
 
-def LGoD(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.left), (D, curr.left.down))
+    case (R, '-') => validBeams(beam.right)
+    case (L, '-') => validBeams(beam.left)
+    case (U, '-') => validBeams(beam.right, beam.left)
+    case (D, '-') => validBeams(beam.right, beam.left)
 
-def RGoR(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.right), (R, curr.right.right))
-
-def LGoL(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.left), (L, curr.left.left))
-
-def UGoR(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.up), (R, curr.up.right))
-
-def DGoR(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.down), (R, curr.down.right))
-
-def UGoL(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.up), (L, curr.up.left))
-
-def UGoU(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.up), (U, curr.up.up))
-
-def DGoL(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.down), (L, curr.down.left))
-
-def DGoD(curr: Coord): Set[(Dir, Coord)] =
-  Set((I, curr.down), (D, curr.down.down))
-
-def physics(mirrorMap: MirrorMap, xLen: Int, yLen: Int)(dir: Dir, curr: Coord): Set[(Dir, Coord)] = {
-  val nextCoord = calcNextCoord(dir, curr)
-
-  mirrorMap.get(nextCoord) match
-    case None => Set((dir, nextCoord)).onlyValid(xLen, yLen)
-
-    case Some(c) => {
-      val _nextCoords = (dir, c) match
-        case (I, _) => Set.empty
-        case (R, '\\') => RGoD(curr)
-        case (L, '\\') => LGoU(curr)
-        case (U, '\\') => UGoL(curr)
-        case (D, '\\') => DGoR(curr)
-
-        case (R, '/') => RGoU(curr)
-        case (L, '/') => LGoD(curr)
-        case (U, '/') => UGoR(curr)
-        case (D, '/') => DGoL(curr)
-
-        case (R, '|') => (RGoU(curr) ++ RGoD(curr))
-        case (L, '|') => (LGoU(curr) ++ LGoD(curr))
-        case (U, '|') => UGoU(curr)
-        case (D, '|') => DGoD(curr)
-
-        case (D, '-') => (DGoR(curr) ++ DGoL(curr))
-        case (U, '-') => (UGoR(curr) ++ UGoL(curr))
-        case (R, '-') => RGoR(curr)
-        case (L, '-') => LGoL(curr)
-
-        case x =>
-          // logger.error(s"Encoutered missing match case for ${x}", "phys")
-          ???
-
-      // logger.debug(s"dir=[${dir}] curr=[${curr}]", "curr input   ")
-      _nextCoords
-        // .tap(x => logger.debug(x.toString, "before filter"))
-        .onlyValid(xLen, yLen)
-        .tap(x => {
-          // logger.debug(x.toString, "after  filter")
-        })
-    }
+    case (R, _) => validBeams(beam.right)
+    case (L, _) => validBeams(beam.left)
+    case (U, _) => validBeams(beam.up)
+    case (D, _) => validBeams(beam.down)
 }
 
-def sizeOfPuzzle(string: String) = {
-  val s = io.Source.fromString(string).getLines()
-  val xLen = s.next().size
-  val yLen = s.length + 1
+def sizeOfPuzzle(map: MirrorMap) = {
+  val xLen = map.head.size
+  val yLen = map.size
   (xLen, yLen)
 }
 
-given Ordering[Coord] =
-  Ordering.fromLessThan((x, y) => (x._2 < y._2) && (x._1 < y._1))
-
-given Ordering[(Dir, Coord)] =
-  Ordering.fromLessThan((x, y) => (x._2._2 <= y._2._2) && (x._2._1 <= y._2._1) && (x._1 <= y._1))
-
 def run1(string: String): Int = {
-  val mirrorMap = parseInput(string)
-  val (xLen, yLen) = sizeOfPuzzle(string)
-  val physRunner = physics(mirrorMap, xLen, yLen)
+  val mirrorMap = MirrorMap.parse(string)
+  val (xLen, yLen) = sizeOfPuzzle(mirrorMap)
   val MAX_WAIT = xLen * yLen
 
-  logger.debug(s"xLen=[${xLen}] yLen=[${yLen}]")
-  logger.debug(mirrorMap.toList.sortBy(_._1._2).toString, "MAP")
-  // logger.debug(MAX_WAIT.toString, "run1 MAX_WAIT")
-  val initialLightBeams: Set[(Dir, Coord)] = Set((R, (0, 0)))
+  val physRunner = physics(mirrorMap, xLen, yLen)
 
   @tailrec
-  def loop(prev: Set[(Dir, Coord)], identicalCount: Int): Set[(Dir, Coord)] = {
-    // logger.debug(s"prevS=[${prev.size}] newS=[${newLights.size}] i_count=[${identicalCount}]")
-    val newLights = prev ++ prev.flatMap(physRunner.tupled)
-    val grouped = newLights.groupBy(_._2._2).mapValues(_.toList.sortBy(_._2._1)).toMap.toList.sortBy(_._1).map(_._2).flatten
+  def loop(
+      beams: Set[Beam],
+      energisedLocations: Set[Coord],
+      identicalCount: Int
+  ): Set[Coord] = {
+    val next: Set[Beam] = beams.flatMap(physRunner)
 
-    logger.debug(grouped.toString, "newLights")
-    // logger.logEmptyLine()
+    val nextEnergisedLocations = energisedLocations ++ next.map(_.coord)
 
-    if ((newLights.size == prev.size) && (identicalCount >= MAX_WAIT)) prev
-    // else if (prev.size > 200) ???
-    else if ((newLights.size == prev.size) && (identicalCount < MAX_WAIT)) loop(prev, identicalCount + 1)
+    if ((energisedLocations == nextEnergisedLocations) && (identicalCount >= MAX_WAIT))
+      energisedLocations
+    else if (energisedLocations == nextEnergisedLocations)
+      loop(next, nextEnergisedLocations, identicalCount + 1)
     else
-      val next = (prev ++ newLights)
-      loop(next, 0)
+      loop(next, nextEnergisedLocations, 0)
   }
 
-  loop(initialLightBeams, 0)
-    .map(_._2)
-    // .tap(x => logger.debug(x.toList.sortBy(_._2).toString(), "result"))
-    .size
+  val initialLightBeam: Beam = (R, (0, 0))
+  val energisedLocations = loop(
+    Set(initialLightBeam),
+    Set(initialLightBeam.coord),
+    0
+  )
+
+  energisedLocations.size
 }
 
 def run2(string: String): Int = ???
@@ -191,54 +142,16 @@ def run2(string: String): Int = ???
  * TESTING
  **************************
  */
-
-// test.focus.on()
-// logger.debug.on()
-
-test(
-  physics(parseInput(e1), 3, 2)(R, (0, 0)).map(_._2),
-  Set((1, 0), (1, 1))
-)
-
-test(
-  parseInputLine(""".\."""),
-  List(1 -> '\\')
-)
-
-test(
-  parseInputLine("""./."""),
-  List(1 -> '/')
-)
-
-test(
-  parseInputLine(""".-."""),
-  List(1 -> '-')
-)
-
-test(
-  parseInputLine(""".|."""),
-  List(1 -> '|')
-)
-
-test(
-  parseInput(e10),
-  Map(
-    (1, 0) -> '\\',
-    (2, 0) -> '/',
-    (0, 1) -> '|',
-    (1, 1) -> '-',
-    (2, 1) -> '|'
-  )
-)
-
 test(run1(e1), 3)
+test(run1(e2), 5)
 
-logger.debug.on()
 test(run1(example), 46)
-// test.ignore(run1(puzzle), ???)
+
 // println("RESULT 1 >>> " + run1(puzzle).toString())
+test(run1(puzzle), 6902)
 
 // println("RESULT 2 >>> " + run2(puzzle).toString())
+// test(run2(puzzle), ???)
 
 /*
  **************************
@@ -249,6 +162,10 @@ test(run1(example), 46)
 def e1: String =
   """.\.
     >...""".stripMargin('>')
+
+def e2: String =
+  """.\.
+    >.-.""".stripMargin('>')
 
 def e10: String =
   """.\/
@@ -272,7 +189,7 @@ def puzzle: String =
     >....\......-...../../../...\......................\.........................-.............|.............|.....
     >.........../..../...........|/\.............\........\.......|.........|..|../............/.........|.........
     >\./...\........\..........\......./....../...............................|....|........|................/.....
-    >-.....|............/...............|...\...|...../......../.....|............|..\..|..../.......-.........\..
+    >|-.....|............/...............|...\...|...../......../.....|............|..\..|..../.......-.........\..
     >........-.............||../..........|.........../..................../.|.....|\..-/......./...\...\....-.....
     >....................//........................./..........\.......|...|.........../......\-......-...\........
     >....../..........\......\.....................\................\......\..\..|.................................
@@ -302,7 +219,7 @@ def puzzle: String =
     >.....|......./...............\.......-................-...........................................\...........
     >.|.................../.....\............./.....\.................-.../.......-..............\..-..............
     >......\........|...|...........//..........|\.\..............................-..../...-............|..........
-    >......\....|\......|........../.........../........-.........|.-\//................/..\....|.../........|....
+    >|......\....|\......|........../.........../........-.........|.-\//................/..\....|.../........|....
     >.-....-......................./.........\.........-.../............................-..|........|.....|...|....
     >.........-..................-..........-....-....................-....-./.......................|.../......\..
     >..-../......................-\.....|...\........./.-...............-.................../../............|......
@@ -368,7 +285,7 @@ def puzzle: String =
     >.|.......\.......-............./.......\............./....................|......|../......-...........\......
     >.....\.....-.....\...\................/......\...\../.\...\....\-....-././...............................|./..
     >.....................-.\.\.........../......./...-......./-.........................\.......|../....\..|..../.
-    >..\......./-......-...../..-....../.................../..-.....................-..../...........\...../......
+    >|..\......./-......-...../..-....../.................../..-.....................-..../...........\...../......
     >......................................./................|....\/....\............/....../......................
     >......................../..........|........-............|.........................|.\................|....../
     >-.............-...|...........-....-..-.|\.......|......\..........-......|-...-......\.......................
