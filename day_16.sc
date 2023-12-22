@@ -26,6 +26,9 @@ val D = -2
 type Dir = R.type | L.type | D.type | U.type
 
 type Beam = (Dir, Coord)
+object Beam:
+  def apply(d: Dir, x: Int, y: Int): Beam = (d, (x, y))
+
 extension (b: Beam)
   def d: Dir = b._1
   def coord: Coord = b._2
@@ -135,13 +138,70 @@ def run1(string: String): Int = {
   energisedLocations.size
 }
 
-def run2(string: String): Int = ???
+def run2(string: String): Int = {
+  val mirrorMap = MirrorMap.parse(string)
+  val (xLen, yLen) = sizeOfPuzzle(mirrorMap)
+  val MAX_WAIT = xLen * yLen
+  val xMax = xLen - 1
+  val yMax = yLen - 1
+
+  val physRunner = physics(mirrorMap, xLen, yLen)
+
+  @tailrec
+  def loop(
+      beams: Set[Beam],
+      energisedLocations: Set[Coord],
+      identicalCount: Int
+  ): Set[Coord] = {
+    val next: Set[Beam] = beams.flatMap(physRunner)
+
+    val nextEnergisedLocations = energisedLocations ++ next.map(_.coord)
+
+    if ((energisedLocations == nextEnergisedLocations) && (identicalCount >= MAX_WAIT))
+      energisedLocations
+    else if (energisedLocations == nextEnergisedLocations)
+      loop(next, nextEnergisedLocations, identicalCount + 1)
+    else
+      loop(next, nextEnergisedLocations, 0)
+  }
+
+  val initialLightBeams: Iterator[Beam] =
+    Iterator
+      .range(0, xLen)
+      .flatMap(x =>
+        Iterator(
+          Beam(D, x, 0),
+          Beam(D, x, yMax)
+        )
+      ) ++
+      Iterator
+        .range(0, yLen)
+        .flatMap(y =>
+          Iterator(
+            Beam(D, 0, y),
+            Beam(D, xMax, y)
+          )
+        )
+
+  val energizedSizes = initialLightBeams.map { beam =>
+    val energisedLocations = loop(
+      Set(beam),
+      Set(beam.coord),
+      0
+    )
+
+    energisedLocations.size
+  }
+
+  energizedSizes.max
+}
 
 /*
  **************************
  * TESTING
  **************************
  */
+
 test(run1(e1), 3)
 test(run1(e2), 5)
 
@@ -150,8 +210,10 @@ test(run1(example), 46)
 // println("RESULT 1 >>> " + run1(puzzle).toString())
 test(run1(puzzle), 6902)
 
+test(run2(example), 51)
+
 // println("RESULT 2 >>> " + run2(puzzle).toString())
-// test(run2(puzzle), ???)
+test(run2(puzzle), 7697) // Takes ~55 mins ¯\_(ツ)_/¯
 
 /*
  **************************
