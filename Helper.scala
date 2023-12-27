@@ -1,3 +1,4 @@
+//> using toolkit latest
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.util.Try
 import logger.logEmptyLine
@@ -100,10 +101,9 @@ object test extends TestMethods {
   }
 }
 
-object run {
-  object enabled extends Toggle
+object run extends Toggle {
   def apply[A](res: => A): Unit =
-    if (enabled.isEnabled)
+    if (isEnabled)
       logger.log("RUN", res.toString())
 
   def ignore[A](res: => A): Unit = ()
@@ -245,6 +245,23 @@ object logger {
 
   def log(key: String, message: String): Unit = {
     println(s"[$key] ${message}")
+  }
+
+  object write {
+
+    def apply(fileName: String, data: String): Unit = {
+      val str = data + System.lineSeparator()
+      os.write.over(os.pwd / fileName, str)
+    }
+
+    object append {
+
+      def apply(fileName: String, data: String): Unit = {
+        val str = data + System.lineSeparator()
+        os.write.append(os.pwd / fileName, str)
+      }
+
+    }
   }
 
   def logEmptyLine(): Unit = println()
