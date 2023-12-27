@@ -1,7 +1,5 @@
 //> using file Helper.scala
 
-run.off()
-
 // val symbols = Vector('*', '#', '+', '$', '&', '%', '/', '-')
 val reverseSymbolRegex = """[\d|\.]""".r
 val numericRegex = """\d""".r
@@ -99,11 +97,50 @@ def run1(input: String) = {
   }
 }
 
+def run2(input: String) = {
+  val (symMap, numMap) = parseInput(input)
+
+  val gearRatios = symMap.foldLeft(0) { case (a, (yIndex, xIndexes)) =>
+    val u = yIndex - 1
+    val c = yIndex
+    val d = yIndex + 1
+
+    a + xIndexes.map {
+      x =>
+        val uRes = numMap.get(u).map(_.filter(_.isPOM1(x))).getOrElse(Vector.empty)
+        val cRes = numMap.get(c).map(_.filter(_.isPOM1(x))).getOrElse(Vector.empty)
+        val dRes = numMap.get(d) .map(_.filter(_.isPOM1(x))).getOrElse(Vector.empty)
+
+        val combined = uRes ++ cRes ++ dRes
+
+        logger.debug(
+          combined.toString,
+          "combined"
+        )
+
+        if (combined.size >= 2) combined.map(_.value).product
+        else 0
+    }.sum
+
+  }
+
+  logger.debug(
+    gearRatios.toString,
+    "gear ratios"
+  )
+
+  gearRatios
+}
+
 /*
  **************************
  * TESTING
  **************************
  */
+
+// test.focus.on()
+// logger.debug.on()
+run.off()
 
 test(
   parseNums("""467..114.."""),
@@ -139,6 +176,17 @@ test(
 )
 
 run(run1(puzzle))
+
+test(
+  run2(example),
+  467835
+)
+
+run(run2(puzzle))
+test(
+  run2(puzzle),
+  86841457
+)
 
 /*
  **************************
